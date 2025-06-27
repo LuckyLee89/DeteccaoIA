@@ -10,6 +10,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 
+if not SUPABASE_URL or not SUPABASE_KEY or not BUCKET_NAME:
+    raise RuntimeError("Variáveis de ambiente SUPABASE_URL, SUPABASE_KEY e BUCKET_NAME são obrigatórias.")
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
