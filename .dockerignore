@@ -1,0 +1,6 @@
+README.md
+*.sh
+*.pyc
+__pycache__/
+teste.py
+.env
