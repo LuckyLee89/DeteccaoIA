@@ -1,6 +1,6 @@
 # Ignorar variáveis sensíveis
 .env
-
+fly.toml
 # Python cache
 *.pyc
 __pycache__/
