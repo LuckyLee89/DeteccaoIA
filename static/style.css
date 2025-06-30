@@ -52,3 +52,18 @@ img {
   border: 1px solid #ccc;
 }
 
+button.logout {
+  background: #e11d48;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+button.logout:hover {
+  background: #be123c;
+}
+

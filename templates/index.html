@@ -17,9 +17,13 @@
     {% if result_img %}
     <div class="result">
       <h2>Imagem enviada com sucesso: {{ result_img }}</h2>
-      <img src="/uploads/{{ result_img }}" width="300" alt="Imagem com detecção">
+      <img src="{{ result_url }}" width="300" alt="Imagem com detecção">
     </div>
     {% endif %}
+    <form action="{{ url_for('logout') }}" method="post" style="text-align: right; margin-bottom: 10px;">
+	  <button type="submit" class="logout">Logout</button>
+   </form>
+
   </div>
 </body>
 </html>

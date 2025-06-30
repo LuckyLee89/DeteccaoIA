@@ -4,3 +4,5 @@ opencv-python-headless
 numpy
 flask
 supabase
+httpx
+
