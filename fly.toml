@@ -32,3 +32,5 @@ primary_region = "gru"
 [experimental]
   auto_rollback = true
   ipv6 = false
+  auto_stop_machines = true
+  auto_start_machines = false
