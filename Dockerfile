@@ -24,6 +24,7 @@ COPY . .
 
 # Atualize o pip e instale as dependências Python
 RUN pip install --upgrade pip setuptools wheel \
+ && pip install opencv-python-headless \
  && pip install -r requirements.txt
 
 # Cria a pasta de uploads no container
@@ -34,6 +35,6 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Comando padrão
-CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:8080", "app:app"]
+CMD ["python", "app.py"]
 
 

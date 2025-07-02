@@ -23,6 +23,14 @@ from datetime import timedelta
 
 app.permanent_session_lifetime = timedelta(hours=1)
 
+@app.route("/status")
+def status():
+    return "Aplicação online", 200
+  
+@app.errorhandler(500)
+def erro_interno(error):
+    return render_template("500.html"), 500
+
 @app.route("/")
 def home():
     return redirect(url_for("galeria"))
@@ -41,7 +49,7 @@ def galeria():
             if file.filename == "":
                 return "Arquivo vazio", 400
 
-            filename = f"{uuid.uuid4()}_{file.filename}"
+            filename = f"{uuid.uuid4().hex}.jpg"
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             file.save(file_path)
@@ -208,18 +216,35 @@ def nomear():
                 "user_id": user_id
             }).execute()
 
-        # Limpa sessão temporária
         session.pop("nomear_faces", None)
         session.pop("nomear_codificacoes", None)
         session.pop("nomear_arquivo", None)
+            # Limpa os arquivos de rosto individuais
+        for i in range(len(codificacoes)):
+          caminho_rosto = os.path.join(app.config['UPLOAD_FOLDER'], f"rosto_{i}_{session['nomear_arquivo']}")
+          if os.path.exists(caminho_rosto):
+            os.remove(caminho_rosto)
 
         return redirect(url_for("galeria"))
 
     imagem = session.get("nomear_arquivo")
     faces = session.get("nomear_faces")
 
-    return render_template("nomear.html", imagem=imagem, faces=faces)
-  
+    # Recorta os rostos e salva individualmente
+    caminho = os.path.join(app.config['UPLOAD_FOLDER'], imagem)
+    imagem_original = face_recognition.load_image_file(caminho)
+
+    rosto_paths = []
+    for i, (top, right, bottom, left) in enumerate(faces):
+        rosto_cv2 = imagem_original[top:bottom, left:right]
+        rosto_bgr = cv2.cvtColor(rosto_cv2, cv2.COLOR_RGB2BGR)
+        filename_rosto = f"rosto_{i}_{imagem}"
+        caminho_rosto = os.path.join(app.config['UPLOAD_FOLDER'], filename_rosto)
+        cv2.imwrite(caminho_rosto, rosto_bgr)
+        rosto_paths.append(filename_rosto)
+        
+    return render_template("nomear.html", rostos=rosto_paths)
+
 
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
