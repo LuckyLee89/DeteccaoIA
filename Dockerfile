@@ -1,20 +1,38 @@
+# Use a imagem oficial do Python slim como base
 FROM python:3.10-slim
+
+# Instale ferramentas de compilação e dependências nativas
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    pkg-config \
+    python3-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    libatlas-base-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libgl1 \
+    libglib2.0-0 \
+ && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /app
 
+# Copie seus arquivos
 COPY . .
 
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Atualize o pip e instale as dependências Python
+RUN pip install --upgrade pip setuptools wheel \
+ && pip install -r requirements.txt
 
-# Garante que a pasta exista dentro do container
+# Cria a pasta de uploads no container
 RUN mkdir -p /app/uploads
 
-# Define porta como variável de ambiente (boa prática)
+# Exponha a porta que o Flask usa
 ENV PORT=8080
-
-# Expõe a porta para fora do container
 EXPOSE 8080
 
-CMD ["python", "app.py"]
+# Comando padrão
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "app:app"]
 

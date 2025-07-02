@@ -1,0 +1,26 @@
+{% extends "base.html" %} {% block title %}Nomear Rostos{% endblock %} {% block
+content %}
+<h1>Nomear Rostos</h1>
+
+<p>Preencha os nomes para os rostos detectados:</p>
+
+<img
+  src="{{ url_for('uploaded_file', filename='detectado_' + imagem) }}"
+  alt="Imagem com rostos"
+/>
+
+<form method="POST">
+  <div style="margin-top: 20px">
+    {% for _ in faces %}
+    <input
+      type="text"
+      name="nomes[]"
+      placeholder="Nome do rosto {{ loop.index }}"
+      required
+      style="width: 100%; margin-bottom: 10px"
+    />
+    {% endfor %}
+  </div>
+  <button type="submit">Salvar</button>
+</form>
+{% endblock %}

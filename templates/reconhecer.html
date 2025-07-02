@@ -1,0 +1,24 @@
+{% extends "base.html" %} {% block title %}Reconhecer Rosto{% endblock %} {%
+block content %}
+<h1>Upload de imagem para reconhecer rosto</h1>
+
+<form action="/reconhecer" method="POST" enctype="multipart/form-data">
+  <input type="file" name="imagem" accept="image/*" required />
+  <button type="submit">Enviar</button>
+</form>
+
+{% if imagem_resultado %}
+<h2>{{ total_faces }} rosto(s) detectado(s):</h2>
+<img
+  src="{{ url_for('uploaded_file', filename=imagem_resultado) }}"
+  width="400"
+/>
+{% if nomes_detectados %}
+<ul>
+  {% for nome in nomes_detectados %}
+  <li>{{ nome }}</li>
+  {% endfor %}
+</ul>
+{% endif %} {% elif total_faces == 0 %}
+<p>Nenhum rosto detectado.</p>
+{% endif %} {% endblock %}

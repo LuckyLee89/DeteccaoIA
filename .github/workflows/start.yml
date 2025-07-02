@@ -1,0 +1,15 @@
+name: Ligar App
+
+on:
+  schedule:
+    - cron: '0 11 * * *' # 08:00 BRT (UTC+3)
+  workflow_dispatch:
+
+jobs:
+  ligar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ligar app no Fly.io
+        run: fly scale count 1
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

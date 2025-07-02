@@ -5,4 +5,8 @@ numpy
 flask
 supabase
 httpx
+opencv-python
+face-recognition
+gunicorn
+
 

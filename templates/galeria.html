@@ -1,0 +1,52 @@
+{% extends "base.html" %} {% block content %}
+
+<!-- Upload Centralizado -->
+<div class="upload-box">
+  <h1>Upload de Imagem</h1>
+  <form
+    action="{{ url_for('galeria') }}"
+    method="POST"
+    enctype="multipart/form-data"
+  >
+    <input type="file" name="imagem" accept="image/*" required />
+    <button type="submit">Enviar</button>
+  </form>
+</div>
+
+<!-- Galeria em tela cheia -->
+{% if imagens %}
+<div class="container">
+  <h2 class="titulo-galeria">Imagens Enviadas</h2>
+  <div class="gallery-container">
+    <div class="masonry">
+      {% for imagem in imagens %}
+      <div class="masonry-item">
+        <img
+          src="{{ imagem.url }}"
+          alt="{{ imagem.nome_arquivo }}"
+          onclick="openModal('{{ imagem.url }}')"
+        />
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal Zoom -->
+<div id="zoomModal" class="modal" onclick="closeModal()">
+  <span class="close">&times;</span>
+  <img class="modal-content" id="modalImage" />
+</div>
+<script>
+  function openModal(src) {
+    const modal = document.getElementById('zoomModal');
+    const modalImg = document.getElementById('modalImage');
+    modal.style.display = 'flex';
+    modalImg.src = src;
+  }
+
+  function closeModal() {
+    document.getElementById('zoomModal').style.display = 'none';
+  }
+</script>
+{% endif %} {% endblock %}

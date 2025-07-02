@@ -20,11 +20,15 @@ primary_region = "gru"
     port = 443
 
   [services.concurrency]
-    hard_limit = 25
-    soft_limit = 20
     type = "connections"
+    soft_limit = 20
+    hard_limit = 25
 
   [[services.tcp_checks]]
     interval = "15s"
     timeout = "2s"
     grace_period = "15s"
+
+[experimental]
+  auto_rollback = true
+  ipv6 = false
