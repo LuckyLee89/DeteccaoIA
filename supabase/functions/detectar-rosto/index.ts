@@ -37,7 +37,8 @@ serve(async req => {
       status: res.status,
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { 'Content-Type': 'application/json' },
       status: 500,
     });

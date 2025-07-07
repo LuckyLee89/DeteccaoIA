@@ -249,32 +249,39 @@ def reconhecer():
         try:
             arquivo = request.files["imagem"]
             nome_original = arquivo.filename
-            caminho_original = os.path.join(UPLOAD_FOLDER, nome_original)
-            arquivo.save(caminho_original)
+            caminho_local = os.path.join(UPLOAD_FOLDER, nome_original)
+            arquivo.save(caminho_local)
 
-            imagem = face_recognition.load_image_file(caminho_original)
-            face_locations = face_recognition.face_locations(imagem)
-            face_encodings = face_recognition.face_encodings(imagem, face_locations)
+            # Upload para o Supabase Storage
+            caminho_bucket = f"imagens/{uuid.uuid4().hex}_{nome_original}"
+            with open(caminho_local, "rb") as f:
+                supabase.storage.from_(BUCKET_NAME).upload(caminho_bucket, f)
+            url_imagem = supabase.storage.from_(BUCKET_NAME).get_public_url(caminho_bucket)
+
+            # Chama função Edge do Supabase
+            res = requests.post(
+                "https://ucftanrvbsccmlalupgk.functions.supabase.co/reconhecimento-completo",
+                json={
+                    "image_url": url_imagem,
+                    "user_id": session["user"]["id"]
+                }
+            )
+
+            if res.status_code != 200:
+                raise Exception(res.json().get("error", "Erro ao chamar função"))
+
+            dados = res.json()
+            if not dados["faces"]:
+                return render_template("reconhecer.html", erro="Nenhum rosto detectado.")
+
+            # Marca rostos na imagem com OpenCV
+            imagem = face_recognition.load_image_file(caminho_local)
             imagem_cv2 = cv2.cvtColor(imagem, cv2.COLOR_RGB2BGR)
 
-            user_id = session["user"]["id"]
-            resposta = supabase.table("rostos_conhecidos").select("*").eq("user_id", user_id).execute()
-            rostos_salvos = resposta.data
-
-            if not rostos_salvos:
-                return "Nenhum rosto conhecido cadastrado ainda", 400
-
-            nomes_conhecidos = [r["nome"] for r in rostos_salvos]
-            codificacoes_conhecidas = [r["encoding"] for r in rostos_salvos]
             nomes_detectados = []
-
-            for encoding, (top, right, bottom, left) in zip(face_encodings, face_locations):
-                matches = face_recognition.compare_faces(codificacoes_conhecidas, encoding, tolerance=0.45)
-                nome = "Desconhecido"
-                if True in matches:
-                    idx = matches.index(True)
-                    nome = nomes_conhecidos[idx]
-
+            for rosto in dados["faces"]:
+                nome = rosto["nome"]
+                top, right, bottom, left = rosto["coordenadas"]
                 nomes_detectados.append(nome)
                 cv2.rectangle(imagem_cv2, (left, top), (right, bottom), (0, 255, 0), 2)
                 cv2.putText(imagem_cv2, nome, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
@@ -289,10 +296,11 @@ def reconhecer():
                                    nomes_detectados=nomes_detectados)
 
         except Exception as e:
-            print("Erro durante o reconhecimento:", e)
-            return f"Erro interno: {str(e)}", 500
+            print("Erro ao reconhecer:", e)
+            return render_template("reconhecer.html", erro="Erro ao processar imagem.")
 
     return render_template("reconhecer.html", imagem_resultado=None, total_faces=None, nomes_detectados=None)
+
 
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):

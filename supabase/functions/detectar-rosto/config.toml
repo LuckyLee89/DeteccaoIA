@@ -1,0 +1,5 @@
+[functions]
+runtime = "deno"
+
+[build]
+# Nenhum comando de build necessário para Deno
