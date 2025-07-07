@@ -7,6 +7,7 @@ import face_recognition
 from datetime import timedelta
 import requests
 import json
+from PIL import Image
 # Variáveis de ambiente
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -38,6 +39,15 @@ def status():
 @app.route("/")
 def home():
     return redirect(url_for("galeria"))
+  
+def reduzir_tamanho_imagem(file_path, max_size=(800, 800)):
+    try:
+        imagem = Image.open(file_path)
+        imagem.thumbnail(max_size)
+        imagem.save(file_path)
+    except Exception as e:
+        print(f"Erro ao redimensionar imagem: {e}")
+
 
 @app.route("/galeria", methods=["GET", "POST"])
 def galeria():
@@ -58,10 +68,12 @@ def galeria():
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             file.save(file_path)
-
+            reduzir_tamanho_imagem(file_path)
+            
             imagem = face_recognition.load_image_file(file_path)
             face_locations = face_recognition.face_locations(imagem)
-            face_encodings = face_recognition.face_encodings(imagem, face_locations)
+            face_encodings = face_recognition.face_encodings(imagem, face_locations, num_jitters=1)
+
 
             if not face_locations:
                 os.remove(file_path)
@@ -288,4 +300,5 @@ def uploaded_file(filename):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", False) == "1")
+
