@@ -1,0 +1,32 @@
+{% extends "base.html" %} {% block title %}Análise Facial{% endblock %} {% block
+content %}
+
+<h1>Análise Facial</h1>
+
+{% if erro %}
+<p style="color: red">{{ erro }}</p>
+{% else %}
+<div style="display: flex; flex-direction: column; align-items: center">
+  <img
+    src="{{ imagem_url }}"
+    alt="Imagem analisada"
+    style="max-width: 400px; margin-bottom: 20px; border-radius: 10px"
+  />
+  <div style="font-size: 18px">
+    <p><strong>Idade estimada:</strong> {{ idade }} anos</p>
+    <p><strong>Gênero:</strong> {{ genero }}</p>
+    <p>
+      <strong>Emoção dominante:</strong> {{ emocao }} ({{
+      "%.1f"|format(conf_emocao) }}%)
+    </p>
+  </div>
+</div>
+{% endif %}
+
+<a
+  href="{{ url_for('galeria') }}"
+  style="display: inline-block; margin-top: 30px"
+  >← Voltar para Galeria</a
+>
+
+{% endblock %}

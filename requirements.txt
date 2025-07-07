@@ -7,3 +7,4 @@ face-recognition
 opencv-python-headless
 numpy
 python-dotenv
+requests

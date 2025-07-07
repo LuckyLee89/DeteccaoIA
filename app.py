@@ -4,7 +4,9 @@ from flask import Flask, request, redirect, url_for, send_from_directory, render
 from supabase import create_client
 import cv2
 import face_recognition
-
+from datetime import timedelta
+import requests
+import json
 # Variáveis de ambiente
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -17,19 +19,21 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Inicializa o app Flask
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 app.secret_key = os.getenv("SECRET_KEY", "segredo-dev")
-
-from datetime import timedelta
-
 app.permanent_session_lifetime = timedelta(hours=1)
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    return render_template("galeria.html", imagens=[], erro="Imagem muito grande. O limite é 10MB."), 413
+
+@app.errorhandler(500)
+def erro_interno(error):
+    return render_template("500.html"), 500
 
 @app.route("/status")
 def status():
     return "Aplicação online", 200
-  
-@app.errorhandler(500)
-def erro_interno(error):
-    return render_template("500.html"), 500
 
 @app.route("/")
 def home():
@@ -49,54 +53,154 @@ def galeria():
             if file.filename == "":
                 return "Arquivo vazio", 400
 
-            filename = f"{uuid.uuid4().hex}.jpg"
+            ext = os.path.splitext(file.filename)[1]
+            filename = f"{uuid.uuid4().hex}{ext}"
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             file.save(file_path)
 
-            # Detecta rostos e salva imagem com quadrados
             imagem = face_recognition.load_image_file(file_path)
             face_locations = face_recognition.face_locations(imagem)
             face_encodings = face_recognition.face_encodings(imagem, face_locations)
 
             if not face_locations:
-                return "Nenhum rosto detectado na imagem", 400
+                os.remove(file_path)
+                return render_template("galeria.html", imagens=[], erro="Nenhum rosto detectado na imagem."), 400
 
+            # Salva imagem com rostos marcados
             imagem_cv2 = cv2.cvtColor(imagem, cv2.COLOR_RGB2BGR)
             for (top, right, bottom, left) in face_locations:
                 cv2.rectangle(imagem_cv2, (left, top), (right, bottom), (0, 255, 0), 2)
-            imagem_detectada_path = os.path.join(app.config['UPLOAD_FOLDER'], f"detectado_{filename}")
-            cv2.imwrite(imagem_detectada_path, imagem_cv2)
+            detectado_path = os.path.join(app.config['UPLOAD_FOLDER'], f"detectado_{filename}")
+            cv2.imwrite(detectado_path, imagem_cv2)
 
-            # Salva no Supabase (original + detectado)
-            with open(file_path, "rb") as f:
-                supabase.storage.from_(BUCKET_NAME).upload(f"imagens/{filename}", f)
+            # Salva JSON leve com os dados dos rostos
+            json_path = os.path.join(app.config['UPLOAD_FOLDER'], f"nomear_{filename}.json")
+            dados = {
+                "arquivo": filename,
+                "faces": face_locations,
+                "codificacoes": [enc.tolist() for enc in face_encodings]
+            }
+            with open(json_path, "w") as f:
+                json.dump(dados, f)
 
-            url = supabase.storage.from_(BUCKET_NAME).get_public_url(f"imagens/{filename}")
-
-            supabase.table("imagens").insert({
-                "nome_arquivo": filename,
-                "url": url,
-                "user_id": user_id
-            }).execute()
-
-            # Armazena localmente os encodings e posições para nomeação
-            session["nomear_arquivo"] = filename
-            session["nomear_faces"] = [(top, right, bottom, left) for (top, right, bottom, left) in face_locations]
-            session["nomear_codificacoes"] = [enc.tolist() for enc in face_encodings]
-
+            session["nomear_json"] = f"nomear_{filename}.json"
             return redirect(url_for("nomear"))
 
         except Exception as e:
             print("ERRO INTERNO NO POST /galeria:", e)
             return f"Erro interno: {str(e)}", 500
 
-    # Sempre busca imagens do usuário logado
     imagens = supabase.table("imagens").select("*").eq("user_id", user_id).order("id", desc=True).execute().data
-
     return render_template("galeria.html", imagens=imagens)
 
 
+@app.route("/nomear", methods=["GET", "POST"])
+def nomear():
+    if "user" not in session or "nomear_json" not in session:
+        return redirect(url_for("galeria"))
+
+    user_id = session["user"]["id"]
+    json_file = session["nomear_json"]
+    json_path = os.path.join(app.config['UPLOAD_FOLDER'], json_file)
+
+    if not os.path.exists(json_path):
+        return redirect(url_for("galeria"))
+
+    with open(json_path, "r") as f:
+        dados = json.load(f)
+
+    filename = dados["arquivo"]
+    faces = dados["faces"]
+    codificacoes = dados["codificacoes"]
+
+    if request.method == "POST":
+        nomes = request.form.getlist("nomes[]")
+
+        for nome, cod in zip(nomes, codificacoes):
+            supabase.table("rostos_conhecidos").insert({
+                "nome": nome,
+                "encoding": cod,
+                "user_id": user_id
+            }).execute()
+
+        # Upload da imagem original
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        with open(file_path, "rb") as f:
+            supabase.storage.from_("uploads").upload(f"imagens/{filename}", f)
+        url = supabase.storage.from_("uploads").get_public_url(f"imagens/{filename}")
+
+        # Registro no banco
+        supabase.table("imagens").insert({
+            "nome_arquivo": filename,
+            "url": url,
+            "user_id": user_id
+        }).execute()
+
+        # Limpa arquivos temporários
+        for i in range(len(codificacoes)):
+            caminho_rosto = os.path.join(app.config['UPLOAD_FOLDER'], f"rosto_{i}_{filename}")
+            if os.path.exists(caminho_rosto):
+                os.remove(caminho_rosto)
+
+        os.remove(json_path)
+        session.pop("nomear_json", None)
+
+        return redirect(url_for("galeria"))
+
+    # GET — mostrar os rostos para nomear
+    imagem_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    imagem_original = face_recognition.load_image_file(imagem_path)
+
+    rosto_paths = []
+    for i, (top, right, bottom, left) in enumerate(faces):
+        face_crop = imagem_original[top:bottom, left:right].copy()
+        face_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR)
+        nome_rosto = f"rosto_{i}_{filename}"
+        caminho_rosto = os.path.join(app.config['UPLOAD_FOLDER'], nome_rosto)
+        cv2.imwrite(caminho_rosto, face_bgr )
+        rosto_paths.append(nome_rosto)
+
+    return render_template("nomear.html", rostos=rosto_paths)
+
+
+@app.route("/analise/<nome_arquivo>")
+def analise(nome_arquivo):
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    caminho = f"imagens/{nome_arquivo}"
+    url = supabase.storage.from_(BUCKET_NAME).get_public_url(caminho)
+
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }
+
+        res = requests.post(
+            "https://ucftanrvbsccmlalupgk.supabase.co/functions/v1/detectar-rosto",
+            headers=headers,
+            json={"image_url": url}
+        )
+
+        dados = res.json()
+        if res.status_code != 200:
+            raise Exception(dados.get("error", "Erro na função de análise"))
+
+        rosto = dados["faces"][0]
+        atributos = rosto["attributes"]
+        idade = atributos["age"]["value"]
+        genero = atributos["gender"]["value"]
+        emocao = max(atributos["emotion"], key=atributos["emotion"].get)
+        conf_emocao = atributos["emotion"][emocao]
+
+        return render_template("analise.html", imagem_url=url, idade=idade,
+                               genero=genero, emocao=emocao, conf_emocao=conf_emocao)
+
+    except Exception as e:
+        print("Erro ao chamar função de análise:", e)
+        return render_template("analise.html", erro="Erro ao processar imagem.")
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -119,31 +223,11 @@ def login():
 
     return render_template("login.html")
 
-
 @app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))
-  
-def detectar_faces(imagem_path, salvar_em):
-    try:
-        imagem = face_recognition.load_image_file(imagem_path)
-        face_locations = face_recognition.face_locations(imagem)
 
-        imagem_cv2 = cv2.cvtColor(imagem, cv2.COLOR_RGB2BGR)
-
-        for (top, right, bottom, left) in face_locations:
-            cv2.rectangle(imagem_cv2, (left, top), (right, bottom), (0, 255, 0), 2)
-
-        cv2.imwrite(salvar_em, imagem_cv2)
-        print(f"[INFO] Imagem salva com detecção: {salvar_em}")
-        return len(face_locations)
-
-    except Exception as e:
-        print("[ERRO detectar_faces]:", e)
-        return 0
-
-  
 @app.route("/reconhecer", methods=["GET", "POST"])
 def reconhecer():
     if "user" not in session:
@@ -156,25 +240,25 @@ def reconhecer():
             caminho_original = os.path.join(UPLOAD_FOLDER, nome_original)
             arquivo.save(caminho_original)
 
-            # Carrega a imagem recebida
             imagem = face_recognition.load_image_file(caminho_original)
             face_locations = face_recognition.face_locations(imagem)
             face_encodings = face_recognition.face_encodings(imagem, face_locations)
             imagem_cv2 = cv2.cvtColor(imagem, cv2.COLOR_RGB2BGR)
 
-            # Carrega rostos conhecidos
             user_id = session["user"]["id"]
-            rostos_salvos = supabase.table("rostos_conhecidos").select("*").eq("user_id", user_id).execute().data
+            resposta = supabase.table("rostos_conhecidos").select("*").eq("user_id", user_id).execute()
+            rostos_salvos = resposta.data
+
+            if not rostos_salvos:
+                return "Nenhum rosto conhecido cadastrado ainda", 400
 
             nomes_conhecidos = [r["nome"] for r in rostos_salvos]
-            codificacoes_conhecidas = [r["codificacao"] for r in rostos_salvos]
-
+            codificacoes_conhecidas = [r["encoding"] for r in rostos_salvos]
             nomes_detectados = []
 
             for encoding, (top, right, bottom, left) in zip(face_encodings, face_locations):
                 matches = face_recognition.compare_faces(codificacoes_conhecidas, encoding, tolerance=0.45)
                 nome = "Desconhecido"
-
                 if True in matches:
                     idx = matches.index(True)
                     nome = nomes_conhecidos[idx]
@@ -198,63 +282,10 @@ def reconhecer():
 
     return render_template("reconhecer.html", imagem_resultado=None, total_faces=None, nomes_detectados=None)
 
-  
-@app.route("/nomear", methods=["GET", "POST"])
-def nomear():
-    if "user" not in session or "nomear_faces" not in session:
-        return redirect(url_for("galeria"))
-
-    if request.method == "POST":
-        nomes = request.form.getlist("nomes[]")
-        codificacoes = session["nomear_codificacoes"]
-        user_id = session["user"]["id"]
-
-        for nome, cod in zip(nomes, codificacoes):
-            supabase.table("rostos_conhecidos").insert({
-                "nome": nome,
-                "codificacao": cod,
-                "user_id": user_id
-            }).execute()
-
-        session.pop("nomear_faces", None)
-        session.pop("nomear_codificacoes", None)
-        session.pop("nomear_arquivo", None)
-            # Limpa os arquivos de rosto individuais
-        for i in range(len(codificacoes)):
-          caminho_rosto = os.path.join(app.config['UPLOAD_FOLDER'], f"rosto_{i}_{session['nomear_arquivo']}")
-          if os.path.exists(caminho_rosto):
-            os.remove(caminho_rosto)
-
-        return redirect(url_for("galeria"))
-
-    imagem = session.get("nomear_arquivo")
-    faces = session.get("nomear_faces")
-
-    # Recorta os rostos e salva individualmente
-    caminho = os.path.join(app.config['UPLOAD_FOLDER'], imagem)
-    imagem_original = face_recognition.load_image_file(caminho)
-
-    rosto_paths = []
-    for i, (top, right, bottom, left) in enumerate(faces):
-        rosto_cv2 = imagem_original[top:bottom, left:right]
-        rosto_bgr = cv2.cvtColor(rosto_cv2, cv2.COLOR_RGB2BGR)
-        filename_rosto = f"rosto_{i}_{imagem}"
-        caminho_rosto = os.path.join(app.config['UPLOAD_FOLDER'], filename_rosto)
-        cv2.imwrite(caminho_rosto, rosto_bgr)
-        rosto_paths.append(filename_rosto)
-        
-    return render_template("nomear.html", rostos=rosto_paths)
-
-
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-
-
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port,debug=True)
-
-
+    app.run(host="0.0.0.0", port=port, debug=True)

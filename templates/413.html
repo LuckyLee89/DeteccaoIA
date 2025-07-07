@@ -1,0 +1,30 @@
+{% extends "base.html" %} {% block title %}Arquivo Grande{% endblock %} {% block
+content %}
+<div style="text-align: center; padding: 60px">
+  <img
+    src="https://illustrations.popsy.co/gray/uploading-files.svg"
+    alt="Arquivo grande"
+    style="max-width: 280px; margin-bottom: 30px"
+  />
+  <h1 style="font-size: 1.8em; color: #e11d48">Arquivo muito grande!</h1>
+  <p style="max-width: 480px; margin: 0 auto; font-size: 1.1em; color: #555">
+    O arquivo enviado excede o limite de 10MB. Por favor, envie uma imagem
+    menor.
+  </p>
+  <a
+    href="{{ url_for('galeria') }}"
+    style="
+      display: inline-block;
+      margin-top: 30px;
+      background-color: #3b82f6;
+      color: white;
+      padding: 10px 24px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: bold;
+    "
+  >
+    Voltar para a Galeria
+  </a>
+</div>
+{% endblock %}
